@@ -22,8 +22,13 @@ add_executable(test_deser test/deser.c deser.c muxdata.c)
 target_link_libraries(test_deser ${GLIB_LIBRARIES})
 target_include_directories(test_deser PRIVATE ${GLIB_INCLUDE_DIRS})
 
-add_executable(get-pl-mux main.c arguments.c fetch.c parser.c muxdata.c deser.c)
+add_executable(test_html2xml test/html2xml.c deser.c muxdata.c parser.c)
+target_link_libraries(test_html2xml ${GLIB_LIBRARIES} ${LIBXML2_LIBRARIES})
+target_compile_definitions(test_html2xml PRIVATE ${LIBXML2_DEFINITIONS})
+target_include_directories(test_html2xml
+    PRIVATE ${GLIB_INCLUDE_DIRS} ${LIBXML2_INCLUDE_DIRS})
 
+add_executable(get-pl-mux main.c arguments.c fetch.c parser.c muxdata.c deser.c)
 target_compile_options(get-pl-mux PRIVATE ${GSTREAMER_CFLAGS_OTHER})
 target_compile_definitions(get-pl-mux PRIVATE ${LIBXML2_DEFINITIONS})
 target_link_libraries(get-pl-mux ${GSTREAMER_LIBRARIES} ${LIBXML2_LIBRARIES}

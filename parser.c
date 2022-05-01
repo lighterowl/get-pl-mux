@@ -106,7 +106,7 @@ static void end_element(void *ctx, const xmlChar *name) {
     if (strcmp((const char *)name, "td") == 0) {
       my_ctx->cur_column++;
     } else if (strcmp((const char *)name, "tr") == 0) {
-      if (my_ctx->cur_row >= 1 && my_ctx->cur_column == 6 &&
+      if (my_ctx->cur_row >= 1 && my_ctx->cur_column >= 6 &&
           my_ctx->parse_buf_mux) {
         mux_data_append_transmitter(my_ctx->muxdata, my_ctx->parse_buf_mux,
                                     &my_ctx->parse_buf);
@@ -115,7 +115,6 @@ static void end_element(void *ctx, const xmlChar *name) {
       g_clear_pointer(&my_ctx->parse_buf_mux, g_free);
       my_ctx->cur_row++;
       my_ctx->cur_column = -1;
-      my_ctx->parse_buf_mux = NULL;
     }
   }
 }
