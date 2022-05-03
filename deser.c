@@ -29,14 +29,14 @@ static void save_mux_params(const struct serialize_ctx *ctx,
   gchar distance_str[G_ASCII_DTOSTR_BUF_SIZE];
   g_ascii_dtostr(distance_str, sizeof(distance_str), muxparms->distance);
   save_as_markup(ctx,
-                 "<transmitter>"
-                 "<name>%s</name>"
-                 "<distance>%s</distance>"
-                 "<frequency>%u</frequency>"
-                 "<bandwidth>%u</bandwidth>"
-                 "<modulation>%u</modulation>"
-                 "<delsys>%u</delsys>"
-                 "</transmitter>",
+                 " <transmitter>\n"
+                 "  <name>%s</name>\n"
+                 "  <distance>%s</distance>\n"
+                 "  <frequency>%u</frequency>\n"
+                 "  <bandwidth>%u</bandwidth>\n"
+                 "  <modulation>%u</modulation>\n"
+                 "  <delsys>%u</delsys>\n"
+                 " </transmitter>\n",
                  muxparms->name, distance_str, tunepars->freq_khz,
                  tunepars->bw_mhz, tunepars->mod, tunepars->dvb_type);
 }
@@ -45,7 +45,7 @@ static void muxdata_hash_print(const gchar *mux, const GArray *transmitters,
                                void *user_data) {
   const struct serialize_ctx *const ser_ctx = user_data;
 
-  save_as_markup(ser_ctx, "<mux name=\"%s\">", mux);
+  save_as_markup(ser_ctx, "<mux name=\"%s\">\n", mux);
 
   for (guint i = 0; i < transmitters->len; ++i) {
     const struct mux_params *const param =
@@ -53,7 +53,7 @@ static void muxdata_hash_print(const gchar *mux, const GArray *transmitters,
     save_mux_params(ser_ctx, param);
   }
 
-  save_as_markup(ser_ctx, "</mux>");
+  save_as_markup(ser_ctx, "</mux>\n");
 }
 
 void serialize_muxdata_hash(MuxData *muxdata,

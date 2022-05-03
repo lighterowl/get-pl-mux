@@ -84,16 +84,16 @@ static void test_deser_to_markup(void) {
   GString *output = g_string_new(NULL);
   serialize_muxdata_hash(md, append_to_gstring, output);
 
-  const char expected[] = "<mux name=\"MUX-42\">"
-                          "<transmitter>"
-                          "<name>foobar</name>"
-                          "<distance>5.5</distance>"
-                          "<frequency>188000</frequency>"
-                          "<bandwidth>7</bandwidth>"
-                          "<modulation>5</modulation>"
-                          "<delsys>16</delsys>"
-                          "</transmitter>"
-                          "</mux>";
+  const char expected[] = "<mux name=\"MUX-42\">\n"
+                          " <transmitter>\n"
+                          "  <name>foobar</name>\n"
+                          "  <distance>5.5</distance>\n"
+                          "  <frequency>188000</frequency>\n"
+                          "  <bandwidth>7</bandwidth>\n"
+                          "  <modulation>5</modulation>\n"
+                          "  <delsys>16</delsys>\n"
+                          " </transmitter>\n"
+                          "</mux>\n";
   g_assert_cmpstr(output->str, ==, expected);
 
   mux_data_destroy(md);
