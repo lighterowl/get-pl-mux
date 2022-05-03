@@ -40,25 +40,40 @@ static bool is_attr(const xmlChar **attrs, const char *name,
   return val ? strcmp((const char *)val, value) == 0 : false;
 }
 
-static void characters(void *ctx, const xmlChar *ch, int len) {
+static gboolean sanitize_mux_id(gchar *mux_id, gsize len) {
+  /* the site uses the symbol MUX-nT2 for transmitters which already operate
+   * in DVB-T2 mode. this causes the application to (rightly) treat these
+   * MUXes as separate which is not desired in this case. */
+  if (strcmp(mux_id + len - 2, "T2") == 0) {
+    mux_id[len - 2] = 0;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+static void characters(void *ctx, const xmlChar *ch, int leni) {
   struct muxparams_parser_ctx *const my_ctx = ctx;
-  if ((ch[0] == '~' && ch[1] == 0) || len <= 0)
+  if ((ch[0] == '~' && ch[1] == 0) || leni <= 0)
     return;
 
-  gsize siz = (gsize)len;
+  const gsize len = (gsize)leni;
   const char *const chch = (const char *)ch;
   switch (my_ctx->cur_column) {
   case 1:
     my_ctx->parse_buf.tune_parms.freq_khz =
         (guint)(g_ascii_strtod(chch, NULL) * 1000.0);
     break;
-  case 2:
-    my_ctx->parse_buf_mux = g_strndup(chch, siz);
+  case 2: {
+    gchar *const mux_id = g_strndup(chch, len);
+    sanitize_mux_id(mux_id, len);
+    my_ctx->parse_buf_mux = mux_id;
     break;
+  }
   case 3:
     if (!my_ctx->encoder_error) {
       /* properly decoded CP1250 - just copy. */
-      my_ctx->parse_buf.name = g_strndup(chch, siz);
+      my_ctx->parse_buf.name = g_strndup(chch, len);
     } else {
       /* parsing in "broken" mode. the characters we got are in CP1250. */
       my_ctx->parse_buf.name =
@@ -211,7 +226,8 @@ struct tuneparams_parser_ctx {
   int cur_column;
 };
 
-static void for_each_mux_param(const GArray *transmitters, guint freq_khz,
+static void for_each_mux_param(const GArray *transmitters,
+                               const struct mux_params *wanted,
                                void (*func)(struct mux_params *, const void *),
                                const void *func_ctx) {
   /* the array is sorted by distance so we need to do a linear search. this
@@ -220,7 +236,8 @@ static void for_each_mux_param(const GArray *transmitters, guint freq_khz,
   for (guint i = 0; i < transmitters->len; ++i) {
     struct mux_params *const par =
         &g_array_index(transmitters, struct mux_params, i);
-    if (par->tune_parms.freq_khz == freq_khz) {
+    if (par->tune_parms.freq_khz == wanted->tune_parms.freq_khz &&
+        strcmp(par->name, wanted->name) == 0) {
       func(par, func_ctx);
     }
   }
@@ -244,8 +261,26 @@ static void add_tuneparams_to_muxdata(MuxData *md,
     return;
   }
 
-  for_each_mux_param(transmitters, with_tuneparms->tune_parms.freq_khz,
-                     set_new_tune_params, &with_tuneparms->tune_parms);
+  for_each_mux_param(transmitters, with_tuneparms, set_new_tune_params,
+                     &with_tuneparms->tune_parms);
+}
+
+static void tune_params_set_dvb_mod(struct tune_params *tuneparms,
+                                    enum fe_delivery_system dvb_type,
+                                    enum fe_modulation mod) {
+  tuneparms->dvb_type = dvb_type;
+  tuneparms->mod = mod;
+}
+
+static void reset_parse_buf(struct tuneparams_parser_ctx *ctx) {
+  mux_params_clear(&ctx->parse_buf);
+  memset(&ctx->parse_buf, 0, sizeof(ctx->parse_buf));
+  g_clear_pointer(&ctx->parse_buf_mux, g_free);
+  /* tune_params are set to DVB-T/64QAM by default, and overridden in
+   * tuneparams_characters() only if the data clearly shows that this is a
+   * DVB-T2 transmission */
+  ctx->parse_buf.tune_parms.dvb_type = SYS_DVBT;
+  ctx->parse_buf.tune_parms.mod = QAM_64;
 }
 
 static void tuneparams_characters(void *ctx, const xmlChar *ch, int len) {
@@ -260,24 +295,26 @@ static void tuneparams_characters(void *ctx, const xmlChar *ch, int len) {
   case 1:
     tune_parms->freq_khz = (guint)(g_ascii_strtod(chch, NULL) * 1000.0);
     break;
-  case 2:
+  case 2: {
     /* all MUX-8 transmissions use 7MHz channels, the rest uses 8MHz. this is
      * not the best way of determining this but getting a definite answer would
      * require querying the site for each located transmitter, which doesn't
      * sound too nice for the webadmin's PoV. */
     tune_parms->bw_mhz = strcmp(chch, "MUX-8") == 0 ? 7 : 8;
-    my_ctx->parse_buf_mux = g_strndup(chch, siz);
+
+    gchar *const mux_id = g_strndup(chch, siz);
+    if (sanitize_mux_id(mux_id, siz)) {
+      tune_params_set_dvb_mod(tune_parms, SYS_DVBT2, QAM_256);
+    }
+    my_ctx->parse_buf_mux = mux_id;
     break;
+  }
   case 3:
     my_ctx->parse_buf.name = g_strndup(chch, siz);
     break;
   case 6:
     if (strstr(chch, "DVB-T2")) {
-      tune_parms->dvb_type = SYS_DVBT2;
-      tune_parms->mod = QAM_256;
-    } else {
-      tune_parms->dvb_type = SYS_DVBT;
-      tune_parms->mod = QAM_64;
+      tune_params_set_dvb_mod(tune_parms, SYS_DVBT2, QAM_256);
     }
     break;
   default:
@@ -317,13 +354,9 @@ static void tuneparams_end_element(void *ctx, const xmlChar *name) {
         add_tuneparams_to_muxdata(my_ctx->muxdata, &my_ctx->parse_buf,
                                   my_ctx->parse_buf_mux);
       }
-      mux_params_clear(&my_ctx->parse_buf);
-      memset(&my_ctx->parse_buf, 0, sizeof(my_ctx->parse_buf));
-      g_clear_pointer(&my_ctx->parse_buf_mux, g_free);
-
+      reset_parse_buf(my_ctx);
       my_ctx->cur_row++;
       my_ctx->cur_column = -1;
-      my_ctx->parse_buf_mux = NULL;
     }
   }
 }
@@ -337,6 +370,7 @@ void parse_tune_params_to_mux_params(MuxData *muxdata, const char *html,
 
   struct tuneparams_parser_ctx my_ctx;
   memset(&my_ctx, 0, sizeof(my_ctx));
+  reset_parse_buf(&my_ctx);
   my_ctx.sax = &sax;
   my_ctx.muxdata = muxdata;
 
