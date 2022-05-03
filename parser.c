@@ -253,7 +253,7 @@ static void add_tuneparams_to_muxdata(MuxData *md,
                                       const struct mux_params *with_tuneparms,
                                       const gchar *mux) {
   /* try to locate the currently parsed transmitter in the hash which is
-   * assumed to contain all the previously fetch and parsed location-based
+   * assumed to contain all the previously fetched and parsed location-based
    * transmitters, and fill in its mux_params structure with what we've parsed.
    */
   GArray *const transmitters = mux_data_get_transmitters_for_mux(md, mux);
@@ -279,8 +279,7 @@ static void reset_parse_buf(struct tuneparams_parser_ctx *ctx) {
   /* tune_params are set to DVB-T/64QAM by default, and overridden in
    * tuneparams_characters() only if the data clearly shows that this is a
    * DVB-T2 transmission */
-  ctx->parse_buf.tune_parms.dvb_type = SYS_DVBT;
-  ctx->parse_buf.tune_parms.mod = QAM_64;
+  tune_params_set_dvb_mod(&ctx->parse_buf.tune_parms, SYS_DVBT, QAM_64);
 }
 
 static void tuneparams_characters(void *ctx, const xmlChar *ch, int len) {
